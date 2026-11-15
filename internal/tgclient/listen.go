@@ -82,22 +82,20 @@ func (c *Client) handle(ctx context.Context, msg *tg.Message, test bool) {
 	c.log.Info(label,
 		"message_id", ev.TelegramMessageID,
 		"author", ev.Author,
-		"url", ev.URL,
 		"post_id", ev.PostID,
 		"floor", ev.Floor,
-		"raw", ev.RawText,
 	)
 
 	c.mu.Lock()
 	pusher := c.pusher
 	c.mu.Unlock()
 	if pusher == nil {
-		c.log.Warn("有通知但未绑定 device token，只写日志")
+		c.log.Warn("有通知但未启用推送渠道，只写日志")
 		return
 	}
 	go func() {
 		if err := pusher.Send(ctx, ev); err != nil {
-			c.log.Error("APNs 发送失败", "message_id", ev.TelegramMessageID, "err", err)
+			c.log.Error("通知投递失败", "message_id", ev.TelegramMessageID, "err", err)
 		}
 	}()
 }

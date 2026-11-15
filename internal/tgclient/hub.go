@@ -8,7 +8,7 @@ import (
 
 	"github.com/skip2/go-qrcode"
 
-	"ns-apns/internal/apns"
+	"ns-apns/internal/channels"
 	"ns-apns/internal/config"
 	"ns-apns/internal/forward"
 	"ns-apns/internal/settings"
@@ -17,8 +17,9 @@ import (
 
 // Hub 先开网页，保存 api 后在同一进程里连 Telegram；缺 session 就在页面出二维码。
 type Hub struct {
-	log    *slog.Logger
-	parent context.Context
+	channelStates map[string]channels.Status
+	log           *slog.Logger
+	parent        context.Context
 
 	mu      sync.Mutex
 	cfg     config.Config
@@ -41,12 +42,14 @@ func (h *Hub) Run(ctx context.Context) error {
 
 func (h *Hub) hooks() web.Hooks {
 	return web.Hooks{
-		View:     h.view,
-		Save:     h.save,
-		PushTest: h.pushTest,
-		QR:       h.qrPNGCopy,
-		Password: h.password,
-		LogPath:  h.cfg.LogPath,
+		View:         h.view,
+		Save:         h.save,
+		PushTest:     h.pushTest,
+		SaveChannels: h.saveChannels,
+		TestChannel:  h.testChannel,
+		QR:           h.qrPNGCopy,
+		Password:     h.password,
+		LogPath:      h.cfg.LogPath,
 	}
 }
 
@@ -66,6 +69,7 @@ func (h *Hub) view() web.Page {
 	busy := h.busy
 	lastErr := h.lastErr
 	cfg := h.cfg
+	states := h.channelStates
 	h.mu.Unlock()
 
 	var p web.Page
@@ -73,6 +77,7 @@ func (h *Hub) view() web.Page {
 		p = c.webView()
 	} else {
 		p = web.PageFromFile(cfg.Settings())
+		p.Channels = web.NewChannelPage(cfg.Channels, states)
 	}
 	p.HTTPAddr = cfg.HTTPAddr
 	p.HasQR = qr
@@ -126,13 +131,14 @@ func (h *Hub) pushTest(ctx context.Context, kind string) error {
 	if c != nil {
 		return c.webPushTest(ctx, kind)
 	}
-	pusher, err := apns.New(cfg, log)
+	pusher, err := newPusher(cfg, log)
 	if err != nil {
 		return err
 	}
 	if pusher == nil {
 		return fmt.Errorf("还没有 device token，请先保存")
 	}
+	defer pusher.Close()
 	return pusher.Send(ctx, forward.TestEvent(kind))
 }
 

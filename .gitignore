@@ -2,3 +2,7 @@
 /settings.json
 /session.json
 *.log
+
+/settings.json.deliveries.json
+
+__pycache__/

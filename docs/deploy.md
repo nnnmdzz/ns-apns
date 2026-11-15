@@ -1,8 +1,8 @@
 # 准备与部署
 
-监听 NodeSeek 官方 Telegram「新提醒」（`@nodemaid_bot`），解析后推到 NS Connect。这不是 Bot：官方把消息推到**你的 Telegram 账号**，本程序登录同一个号去收。
+监听 NodeSeek 官方 Telegram「新提醒」（`@nodemaid_bot`），解析后推到 NS Connect、企业微信机器人或 Bark。企业微信与 Bark 配置见[通知渠道说明](notification-channels.md)。这不是 Bot：官方把消息推到**你的 Telegram 账号**，本程序登录同一个号去收。
 
-配置只有一份 `settings.json`，用网页改。没有 `.env`。仓库：https://github.com/tyrad/ns-apns
+配置只有一份 `settings.json`，用网页改。没有 `.env`。仓库：https://github.com/nnnmdzz/ns-apns
 
 ## 谁做什么
 
@@ -93,7 +93,7 @@ Device Token **不要发给 AI**，只贴到设置页。
 
 **方式 A：从 Release 下载（不用编译）**
 
-1. 打开 https://github.com/tyrad/ns-apns/releases
+1. 打开 https://github.com/nnnmdzz/ns-apns/releases
 2. 打开最新一条（或指定的 tag），按下表下对应文件。
 3. 可以在自己电脑上下好再拷到服务器：
 
@@ -106,16 +106,16 @@ scp ns-apns-linux-amd64 user@你的VPS:<安装目录>/ns-apns
 ```bash
 # 文件名按架构改，版本号改成 Release 页面上实际的 tag
 curl -L -o ns-apns \
-  https://github.com/tyrad/ns-apns/releases/download/v0.1.0/ns-apns-linux-amd64
+  https://github.com/nnnmdzz/ns-apns/releases/download/v0.1.0/ns-apns-linux-amd64
 chmod +x ns-apns
 ```
 
 **方式 B：自己编译**
 
-需要 Go 1.22+。
+需要与 go.mod 匹配的 Go 版本（当前为 Go 1.26）。
 
 ```bash
-git clone https://github.com/tyrad/ns-apns.git
+git clone https://github.com/nnnmdzz/ns-apns.git
 cd ns-apns
 make dist
 ```

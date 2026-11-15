@@ -9,6 +9,7 @@ import (
 func PageFromFile(f settings.File) Page {
 	f.Normalize()
 	return Page{
+		Channels:    channelPage(f.Channels, nil),
 		AppID:       f.AppID,
 		AppHashSet:  f.AppHash != "",
 		SessionPath: f.SessionPath,

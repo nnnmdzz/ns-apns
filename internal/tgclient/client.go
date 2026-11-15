@@ -17,7 +17,7 @@ import (
 	"github.com/gotd/td/tgerr"
 	"github.com/mdp/qrterminal/v3"
 
-	"ns-apns/internal/apns"
+	"ns-apns/internal/channels"
 	"ns-apns/internal/config"
 	"ns-apns/internal/settings"
 )
@@ -33,7 +33,7 @@ type Client struct {
 
 	mu       sync.Mutex
 	api      *tg.Client
-	pusher   *apns.Sender
+	pusher   *channels.Dispatcher
 	sourceID int64
 	testID   int64
 	selfName string
@@ -70,7 +70,7 @@ func New(cfg config.Config, log *slog.Logger) (*Client, error) {
 		opts.Resolver = r
 	}
 
-	pusher, err := apns.New(cfg, log)
+	pusher, err := newPusher(cfg, log)
 	if err != nil {
 		return nil, err
 	}

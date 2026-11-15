@@ -6,21 +6,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"ns-apns/internal/channels"
 )
 
 const Path = "settings.json"
 
 type File struct {
-	AppID        int      `json:"app_id"`
-	AppHash      string   `json:"app_hash"`
-	SessionPath  string   `json:"session_path"`
-	SourceBot    string   `json:"source_bot"`
-	TestBot      string   `json:"test_bot"`
-	Proxy        string   `json:"proxy"`
-	LogLevel     string   `json:"log_level"`
-	LogPath      string   `json:"log_path"`
-	DeviceTokens []string `json:"device_tokens"`
-	HTTPPassword string   `json:"http_password"`
+	Channels     channels.Config `json:"channels"`
+	AppID        int             `json:"app_id"`
+	AppHash      string          `json:"app_hash"`
+	SessionPath  string          `json:"session_path"`
+	SourceBot    string          `json:"source_bot"`
+	TestBot      string          `json:"test_bot"`
+	Proxy        string          `json:"proxy"`
+	LogLevel     string          `json:"log_level"`
+	LogPath      string          `json:"log_path"`
+	DeviceTokens []string        `json:"device_tokens"`
+	HTTPPassword string          `json:"http_password"`
 }
 
 func Default() File {
@@ -70,6 +73,7 @@ func Save(path string, f File) error {
 }
 
 func (f *File) Normalize() {
+	f.Channels.Normalize()
 	f.AppHash = strings.TrimSpace(f.AppHash)
 	f.SessionPath = strings.TrimSpace(f.SessionPath)
 	if f.SessionPath == "" {

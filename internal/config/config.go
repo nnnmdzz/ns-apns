@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"ns-apns/internal/channels"
 	"ns-apns/internal/settings"
 )
 
 type Config struct {
+	Channels     channels.Config
 	AppID        int
 	AppHash      string
 	SessionPath  string
@@ -42,6 +44,7 @@ func Load() (Config, error) {
 func FromFile(f settings.File) Config {
 	f.Normalize()
 	return Config{
+		Channels:     f.Channels,
 		AppID:        f.AppID,
 		AppHash:      f.AppHash,
 		SessionPath:  f.SessionPath,
@@ -58,6 +61,7 @@ func FromFile(f settings.File) Config {
 
 func (c Config) Settings() settings.File {
 	return settings.File{
+		Channels:     c.Channels,
 		AppID:        c.AppID,
 		AppHash:      c.AppHash,
 		SessionPath:  c.SessionPath,

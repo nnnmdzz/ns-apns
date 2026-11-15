@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"ns-apns/internal/apns"
 	"ns-apns/internal/config"
 	"ns-apns/internal/forward"
 	"ns-apns/internal/settings"
@@ -15,7 +14,7 @@ import (
 func (c *Client) webView() web.Page {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return web.Page{
+	p := web.Page{
 		TelegramUser: c.selfName,
 		AppID:        c.cfg.AppID,
 		AppHashSet:   c.cfg.AppHash != "",
@@ -29,10 +28,12 @@ func (c *Client) webView() web.Page {
 		LogPath:      c.cfg.LogPath,
 		TokensText:   strings.Join(c.cfg.DeviceTokens, "\n"),
 		TokenCount:   len(c.cfg.DeviceTokens),
-		APNsOn:       c.pusher != nil,
+		APNsOn:       len(c.cfg.DeviceTokens) > 0,
 		HTTPAddr:     c.cfg.HTTPAddr,
 		PasswordSet:  c.cfg.HTTPPassword != "",
 	}
+	p.Channels = web.NewChannelPage(c.cfg.Channels, c.pusher.Statuses())
+	return p
 }
 
 func (c *Client) applySettings(ctx context.Context, s settings.File) error {
@@ -61,17 +62,19 @@ func (c *Client) applySettings(ctx context.Context, s settings.File) error {
 	cfg := config.FromFile(s)
 	cfg.SettingsPath = c.cfg.SettingsPath
 	cfg.HTTPAddr = listen
-	pusher, err := apns.New(cfg, c.log)
+	pusher, err := newPusher(cfg, c.log)
 	if err != nil {
 		return err
 	}
 
 	c.mu.Lock()
+	oldPusher := c.pusher
 	c.cfg = cfg
 	c.sourceID = sourceID
 	c.testID = testID
 	c.pusher = pusher
 	c.mu.Unlock()
+	oldPusher.Close()
 
 	c.log.Info("设置已更新",
 		"source", "@"+s.SourceBot,

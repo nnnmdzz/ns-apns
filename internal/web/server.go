@@ -18,6 +18,7 @@ var tplFS embed.FS
 var pages = template.Must(template.New("").ParseFS(tplFS, "templates/*.html"))
 
 type Page struct {
+	Channels     ChannelPage
 	Flash        string
 	Error        string
 	TelegramUser string
@@ -43,26 +44,28 @@ type Page struct {
 }
 
 type Form struct {
-	AppID        int
-	AppHash      string
-	SessionPath  string
-	SourceBot    string
-	TestBot      string
-	Proxy        string
-	LogLevel     string
-	LogPath      string
-	DeviceTokens []string
+	AppID         int
+	AppHash       string
+	SessionPath   string
+	SourceBot     string
+	TestBot       string
+	Proxy         string
+	LogLevel      string
+	LogPath       string
+	DeviceTokens  []string
 	HTTPPassword  string
 	ClearPassword bool
 }
 
 type Hooks struct {
-	View     func() Page
-	Save     func(ctx context.Context, in Form) error
-	PushTest func(ctx context.Context, kind string) error
-	QR       func() []byte
-	Password func() string
-	LogPath  string
+	View         func() Page
+	Save         func(ctx context.Context, in Form) error
+	PushTest     func(ctx context.Context, kind string) error
+	SaveChannels func(context.Context, ChannelForm) error
+	TestChannel  func(context.Context, string, string) error
+	QR           func() []byte
+	Password     func() string
+	LogPath      string
 }
 
 func Listen(ctx context.Context, addr string, hooks Hooks, log *slog.Logger) error {
@@ -70,6 +73,8 @@ func Listen(ctx context.Context, addr string, hooks Hooks, log *slog.Logger) err
 		log = slog.Default()
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /channels", func(w http.ResponseWriter, r *http.Request) { renderChannels(w, hooks.View(), r) })
+	mux.HandleFunc("POST /channels", func(w http.ResponseWriter, r *http.Request) { handleChannels(w, r, hooks) })
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		render(w, withDebug(hooks.View(), r))
 	})
@@ -93,7 +98,6 @@ func Listen(ctx context.Context, addr string, hooks Hooks, log *slog.Logger) err
 	mux.HandleFunc("GET /logs", func(w http.ResponseWriter, r *http.Request) {
 		serveLogs(w, hooks.LogPath)
 	})
-
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -120,8 +124,18 @@ func Listen(ctx context.Context, addr string, hooks Hooks, log *slog.Logger) err
 
 func gate(next http.Handler, hooks Hooks) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "same-origin")
 		if r.Method == http.MethodPost {
-			_ = r.ParseForm()
+			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+			if !sameOrigin(r) {
+				http.Error(w, "请求来源无效", http.StatusForbidden)
+				return
+			}
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "表单内容过大或格式有误", http.StatusBadRequest)
+				return
+			}
 			switch r.FormValue("op") {
 			case "login":
 				handleLogin(w, r, hooks)
@@ -181,15 +195,15 @@ func handleIndexPost(w http.ResponseWriter, r *http.Request, hooks Hooks) {
 		return
 	}
 	in := Form{
-		AppID:        atoi(r.FormValue("app_id")),
-		AppHash:      r.FormValue("app_hash"),
-		SessionPath:  r.FormValue("session_path"),
-		SourceBot:    r.FormValue("source_bot"),
-		TestBot:      r.FormValue("test_bot"),
-		Proxy:        r.FormValue("proxy"),
-		LogLevel:     r.FormValue("log_level"),
-		LogPath:      r.FormValue("log_path"),
-		DeviceTokens: splitLines(r.FormValue("device_tokens")),
+		AppID:         atoi(r.FormValue("app_id")),
+		AppHash:       r.FormValue("app_hash"),
+		SessionPath:   r.FormValue("session_path"),
+		SourceBot:     r.FormValue("source_bot"),
+		TestBot:       r.FormValue("test_bot"),
+		Proxy:         r.FormValue("proxy"),
+		LogLevel:      r.FormValue("log_level"),
+		LogPath:       r.FormValue("log_path"),
+		DeviceTokens:  splitLines(r.FormValue("device_tokens")),
 		HTTPPassword:  r.FormValue("http_password"),
 		ClearPassword: r.FormValue("clear_password") == "1",
 	}

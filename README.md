@@ -1,6 +1,8 @@
 # ns-apns
 
-监听 NodeSeek 官方 Telegram「新提醒」（`@nodemaid_bot`），解析后推到 NS Connect。
+监听 NodeSeek 官方 Telegram「新提醒」（`@nodemaid_bot`），解析后推到 NS Connect、企业微信机器人或 Bark。
+
+本 fork 新增[通知渠道设置与维护](docs/notification-channels.md)，提供[自动构建的 Linux 安装包](https://github.com/nnnmdzz/ns-apns/releases/latest)。两个外部渠道均可独立于 APNs 使用。
 
 这不是 Bot。官方把消息推到**你的 Telegram 账号**，本程序登录同一个号去收。
 
@@ -25,12 +27,12 @@
 
 把装到服务器、拉起进程交给 AI，让它按这份文档做。扫码和 Token 你自己在设置页完成。
 
-https://github.com/tyrad/ns-apns/blob/main/docs/deploy.md
+https://github.com/nnnmdzz/ns-apns/blob/main/docs/deploy.md
 
 可以对 AI 说：
 
 ```
-请按 https://github.com/tyrad/ns-apns/blob/main/docs/deploy.md 帮我部署 ns-apns。
+请按 https://github.com/nnnmdzz/ns-apns/blob/main/docs/deploy.md 帮我部署 ns-apns。
 我已经申请好 Telegram 的 api_id 和 api_hash。
 部署机器是：<SSH 用户@地址>
 部署目录：<安装目录>
