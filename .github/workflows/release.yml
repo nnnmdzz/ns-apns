@@ -1,37 +1,107 @@
-name: release
-
+name: Fork Release
 on:
   push:
-    tags:
-      - "v*"
-
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: write
-
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
 jobs:
   release:
+    if: github.repository != 'tyrad/ns-apns' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GOMEMLIMIT: 2GiB
+      GOMAXPROCS: '2'
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Test
-        run: go test ./...
-
-      - name: Build
-        run: make dist VERSION="${GITHUB_REF_NAME#v}"
-
-      - name: Release
+      - name: Validate version logic
+        run: python3 -m unittest discover -s scripts -v
+      - name: Choose release version
+        id: version
+        run: python3 scripts/release_version.py >> "$GITHUB_OUTPUT"
+      - name: Reserve tag
+        id: existing
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --generate-notes \
-            --title "$GITHUB_REF_NAME" \
-            bin/ns-apns-linux-amd64 \
-            bin/ns-apns-linux-arm64
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' 2>/dev/null | grep -qx false; then
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"
+          else
+            git tag "$RELEASE_TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+      - uses: actions/setup-go@v6
+        if: steps.existing.outputs.skip != 'true'
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - name: Test service
+        if: steps.existing.outputs.skip != 'true'
+        run: go test -p 1 ./...
+      - name: Check channel concurrency
+        if: steps.existing.outputs.skip != 'true'
+        run: go test -race ./internal/channels ./internal/web
+      - name: Build Linux binaries
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -p 1 -trimpath \
+              -ldflags "-s -w -X ns-apns/internal/version.Version=$RELEASE_VERSION" \
+              -o "dist/ns-apns-linux-$arch" ./cmd/ns-apns
+          done
+          python3 - <<'PY'
+          import json, os, pathlib
+          pathlib.Path('dist/build-provenance.json').write_text(json.dumps({
+              'version': os.environ['RELEASE_VERSION'], 'git_sha': os.environ['GITHUB_SHA'],
+              'repository': os.environ['GITHUB_REPOSITORY'], 'run_id': os.environ['GITHUB_RUN_ID']
+          }, indent=2) + '\n')
+          PY
+          cd dist
+          sha256sum ns-apns-linux-* build-provenance.json > SHA256SUMS
+      - name: Publish release
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          cat > "$notes" <<EOF_NOTES
+          ns-apns ${RELEASE_VERSION}
+
+          - 新增企业微信机器人与 Bark，可独立于 APNs 启用。
+          - 服务设置页新增渠道配置、独立测试通知和最近投递状态。
+          - 支持 Bark 自架服务、Basic Auth 及点击回到 NS Connect。
+          - 持久保存成功投递记录，限频时有限重试，结果不明时避免盲目重送。
+          - 升级时替换对应架构的二进制，保留 settings.json、session.json 和投递状态文件。
+          - 部署与使用说明：docs/notification-channels.md。
+          - 来源提交：${GITHUB_SHA}
+          EOF_NOTES
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "$RELEASE_VERSION" --notes-file "$notes"
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest --notes-file "$notes"
+      - uses: actions/upload-artifact@v5
+        if: always() && steps.existing.outputs.skip != 'true'
+        with:
+          name: ns-apns-linux
+          path: dist/*
+          if-no-files-found: ignore
